@@ -18,84 +18,90 @@ config = {
 
 avaiableNewSettingTables = ['settings_shortcuts', 'settings_view_for_employee', 'settings_view_leaves', 'settings_view_overhours']
 def main():
-    action = askUserForAction()
+    print("BEFORE USE - Don't forget you need to create settings child tables but DON'T DELETE FIELD FROM settings YET !")
+    print("The same situation on event_history table. you need to create it but DON'T DROP COLUMNS FROM TABLE event!!")
+    understand = askUserBool("Understand ? (y/n) [y]:")
+    if(understand):
+        action = askUserForAction()
 
-    if(action == 0): # Transfer from settings to child.
-        try:
-            connection = mysql.connector.connect(**config)
-            if(connection.is_connected()):
-                print("Connect to database - correct.")
-                settingsColumnName = getNameOfColumns(connection, 'settings')
+        if(action == 0): # Transfer from settings to child.
+            try:
+                connection = mysql.connector.connect(**config)
+                if(connection.is_connected()):
+                    print("Connect to database - correct.")
+                    settingsColumnName = getNameOfColumns(connection, 'settings')
 
-                tablesValidation = {}
-                tableOfColumns = {}
-                settingChilds = multiSelectOption('Pick settings you want to transfer, press SPACE to select', avaiableNewSettingTables)
-                for tableName in settingChilds:
-                    tablesValidation[tableName] = True
-                    settingColumns = getNameOfColumns(connection, tableName)
-                    if(len(settingColumns) != 0 ):
-                        for settingColumn in settingColumns:
-                            if not settingColumn in settingsColumnName:
-                                tablesValidation[tableName] = False
+                    tablesValidation = {}
+                    tableOfColumns = {}
+                    settingChilds = multiSelectOption('Pick settings you want to transfer, press SPACE to select', avaiableNewSettingTables)
+                    for tableName in settingChilds:
+                        tablesValidation[tableName] = True
+                        settingColumns = getNameOfColumns(connection, tableName)
+                        if(len(settingColumns) != 0 ):
+                            for settingColumn in settingColumns:
+                                if not settingColumn in settingsColumnName:
+                                    tablesValidation[tableName] = False
 
+                            if(tablesValidation[tableName] == True):
+                                tableOfColumns[tableName] = settingColumns
+                        else:
+                            print("[ERROR] Table "+tableName+" does not exist - rejected!")
+                            tablesValidation[tableName] = False
+
+                    for tableName in tablesValidation:
                         if(tablesValidation[tableName] == True):
-                            tableOfColumns[tableName] = settingColumns
+                            isDataTransfered = transferDataFromTableToTable(connection, tableName, tableOfColumns[tableName], 'settings')
+                            if(isDataTransfered):
+                                print("[DONE] TABLE "+tableName+" imported correctly !")
+                        else:
+                            print("[ERROR] Some field from "+tableName+" not in table settings - rejected")
+                else:
+                    print("Connecting to database falied.")
+            except mysql.connector.Error as error:
+                if error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+                    print("Cannot access to database, maybe username or password is wrong.")
+                elif error.errno == errorcode.ER_BAD_DB_ERROR:
+                    print("Chosen database does not exist.")
+                else:
+                    print(error)
+            else:
+                connection.close()
+        elif(action == 1):
+            try:
+                connection = mysql.connector.connect(**config)
+                if(connection.is_connected()):
+                    print("Connect to database - correct.")
+                    
+                    isEventsValid = True
+                    eventsColumnName = getNameOfColumns(connection, 'event')
+                    eventsColumnName[eventsColumnName.index('id')] = 'event_id'
+                    eventHistryColumnName = getNameOfColumns(connection, 'event_history')
+                    eventHistryColumnName.remove("id")
+                    if(len(eventHistryColumnName) != 0 ):
+                        for eventHistoryName in eventHistryColumnName:
+                            if eventHistoryName != 'event_id' and not eventHistoryName in eventsColumnName:
+                                isEventsValid = False
                     else:
-                        print("[ERROR] Table "+tableName+" does not exist - rejected!")
-                        tablesValidation[tableName] = False
+                        print("[ERROR] Table event_histry does not exist - rejected!")
+                        isEventsValid = False
 
-                for tableName in tablesValidation:
-                    if(tablesValidation[tableName] == True):
-                        isDataTransfered = transferDataFromTableToTable(connection, tableName, tableOfColumns[tableName], 'settings')
+                    if isEventsValid:
+                        isDataTransfered = transferDataFromTableToTable(connection, 'event_history', eventHistryColumnName, 'event')
                         if(isDataTransfered):
-                            print("[DONE] TABLE "+tableName+" imported correctly !")
+                            print("[DONE] TABLE event_history imported correctly !")
                     else:
-                        print("[ERROR] Some field from "+tableName+" not in table settings - rejected")
-            else:
-                print("Connecting to database falied.")
-        except mysql.connector.Error as error:
-            if error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-                print("Cannot access to database, maybe username or password is wrong.")
-            elif error.errno == errorcode.ER_BAD_DB_ERROR:
-                print("Chosen database does not exist.")
-            else:
-                print(error)
-        else:
-            connection.close()
-    elif(action == 1):
-        try:
-            connection = mysql.connector.connect(**config)
-            if(connection.is_connected()):
-                print("Connect to database - correct.")
-                
-                isEventsValid = True
-                eventsColumnName = getNameOfColumns(connection, 'event')
-                eventsColumnName[eventsColumnName.index('id')] = 'event_id'
-                eventHistryColumnName = getNameOfColumns(connection, 'event_history')
-                eventHistryColumnName.remove("id")
-                if(len(eventHistryColumnName) != 0 ):
-                    for eventHistoryName in eventHistryColumnName:
-                        if eventHistoryName != 'event_id' and not eventHistoryName in eventsColumnName:
-                            isEventsValid = False
+                        print("[ERROR] Some field from event_history not in table events - rejected")
+            except mysql.connector.Error as error:
+                if error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
+                    print("Cannot access to database, maybe username or password is wrong.")
+                elif error.errno == errorcode.ER_BAD_DB_ERROR:
+                    print("Chosen database does not exist.")
                 else:
-                    print("[ERROR] Table event_histry does not exist - rejected!")
-                    isEventsValid = False
-
-                if isEventsValid:
-                    isDataTransfered = transferDataFromTableToTable(connection, 'event_history', eventHistryColumnName, 'event')
-                    if(isDataTransfered):
-                        print("[DONE] TABLE event_history imported correctly !")
-                else:
-                    print("[ERROR] Some field from event_history not in table events - rejected")
-        except mysql.connector.Error as error:
-            if error.errno == errorcode.ER_ACCESS_DENIED_ERROR:
-                print("Cannot access to database, maybe username or password is wrong.")
-            elif error.errno == errorcode.ER_BAD_DB_ERROR:
-                print("Chosen database does not exist.")
+                    print(error)
             else:
-                print(error)
-        else:
-            connection.close()
+                connection.close()
+    else:
+        print("Script rejected.")
 
 def getNameOfColumns(connection, table_name):
     arrayOfColumns = []
